@@ -6,7 +6,7 @@ from argparse import Namespace
 from datetime import datetime
 from pathlib import Path
 
-from caelestia.utils import hypr
+from caelestia.utils import niri
 from caelestia.utils.notify import close_notification, notify
 from caelestia.utils.paths import get_config, recording_notif_path, recording_path, recordings_dir
 
@@ -56,7 +56,7 @@ class Command:
         args = ["-w"]
         fps = self.fps()
 
-        monitors = hypr.message("monitors")
+        outputs = niri.get_outputs()
         if self.args.region:
             if self.args.region == "slurp":
                 region = subprocess.check_output(["slurp", "-f", "%wx%h+%x+%y"], text=True)
@@ -72,18 +72,25 @@ class Command:
             r = x, y, w, h
             if fps is None:
                 max_rr = 0
-                for monitor in monitors:
-                    if self.intersects((monitor["x"], monitor["y"], monitor["width"], monitor["height"]), r):
-                        rr = round(monitor["refreshRate"])
+                for name, output in outputs.items():
+                    mode = output.get("mode", {})
+                    loc = output.get("location", {})
+                    out_w = mode.get("width", 0)
+                    out_h = mode.get("height", 0)
+                    out_x = loc.get("x", 0)
+                    out_y = loc.get("y", 0)
+                    if self.intersects((out_x, out_y, out_w, out_h), r):
+                        rr = round(mode.get("refresh_rate", 0) / 1000)
                         max_rr = max(max_rr, rr)
                 fps = max_rr
             args += ["-f", str(fps)]
         else:
-            focused_monitor = next(monitor for monitor in monitors if monitor["focused"])
-            if focused_monitor:
+            focused_name = niri.get_focused_output_name()
+            if focused_name and focused_name in outputs:
+                output = outputs[focused_name]
                 if fps is None:
-                    fps = round(focused_monitor["refreshRate"])
-                args += [focused_monitor["name"], "-f", str(fps)]
+                    fps = round(output.get("mode", {}).get("refresh_rate", 0) / 1000)
+                args += [focused_name, "-f", str(fps)]
 
         if self.args.sound:
             args += ["-a", "default_output"]

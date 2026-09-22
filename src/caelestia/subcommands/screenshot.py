@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from caelestia.utils import hypr
+from caelestia.utils import niri
 from caelestia.utils.notify import notify
 from caelestia.utils.paths import get_config, screenshots_cache_dir, screenshots_dir
 
@@ -186,10 +186,9 @@ class Command:
 
     def fullscreen(self) -> None:
         cmd = ["grim"]
-        monitors = hypr.message("monitors")
-        focused_monitor = next((m for m in monitors if m.get("focused")), None)
-        if focused_monitor:
-            cmd += ["-o", focused_monitor["name"]]
+        focused_output = niri.get_focused_output_name()
+        if focused_output:
+            cmd += ["-o", focused_output]
         cmd += ["-"]
         sc_data = subprocess.check_output(cmd)
         self.handle_action(sc_data, is_region=False)

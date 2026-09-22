@@ -8,7 +8,6 @@ import tempfile
 from pathlib import Path
 
 from caelestia.utils.colour import get_dynamic_colours
-from caelestia.utils.hypr import is_lua_config
 from caelestia.utils.io import log_exception
 from caelestia.utils.paths import (
     atomic_write,
@@ -21,21 +20,6 @@ from caelestia.utils.paths import (
     user_templates_dir,
 )
 from caelestia.utils.scheme import get_scheme
-
-
-def gen_conf(colours: dict[str, str]) -> str:
-    conf = ""
-    for name, colour in colours.items():
-        conf += f"${name} = {colour}\n"
-    return conf
-
-
-def gen_lua(colours: dict[str, str]) -> str:
-    lua = "return {\n"
-    for name, colour in colours.items():
-        lua += f'  {name} = "{colour}",\n'
-    lua += "}"
-    return lua
 
 
 def gen_scss(colours: dict[str, str]) -> str:
@@ -144,9 +128,10 @@ def apply_terms(sequences: str) -> None:
 
 
 @log_exception
-def apply_hypr(conf: str) -> None:
-    ext = "lua" if is_lua_config() else "conf"
-    atomic_write(config_dir / f"hypr/scheme/current.{ext}", conf)
+def apply_niri(colours: dict[str, str]) -> None:
+    # Niri handles theming via the shell reading scheme.json at runtime.
+    # No static config file injection needed (unlike Hyprland).
+    pass
 
 
 @log_exception
@@ -425,7 +410,7 @@ def apply_colours(colours: dict[str, str], mode: str) -> None:
             if check("enableTerm"):
                 apply_terms(gen_sequences(colours))
             if check("enableHypr"):
-                apply_hypr(gen_lua(colours) if is_lua_config() else gen_conf(colours))
+                apply_niri(colours)
             if check("enableDiscord"):
                 apply_discord(gen_scss(colours))
             if check("enableSpicetify"):
