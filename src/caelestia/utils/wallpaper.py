@@ -299,7 +299,7 @@ def extract_all_video_thumbs() -> None:
             pass
 
 
-def set_wallpaper(wall: Path, no_smart: bool) -> None:
+def set_wallpaper(wall: Path, no_smart: bool, no_scheme: bool = False) -> None:
     # Make path absolute
     wall = Path(wall).resolve()
 
@@ -337,21 +337,31 @@ def set_wallpaper(wall: Path, no_smart: bool) -> None:
             import shutil
             shutil.copy2(thumb, fast_thumb)
 
-    scheme = get_scheme()
-
-    # Change mode and variant based on wallpaper colour
-    if scheme.name == "dynamic" and not no_smart:
-        smart_opts = get_smart_opts(wall_cache, cache)
-        scheme.mode = smart_opts["mode"]
-        scheme.variant = smart_opts["variant"]
-
-    # Update colours
-    scheme.update_colours()
-    apply_colours(scheme.colours, scheme.mode)
-
     # Run custom post-hook if configured
     cfg = get_config().get("wallpaper", {})
-    if post_hook := cfg.get("postHook"):
+    post_hook = cfg.get("postHook")
+
+    scheme = None
+    if not no_scheme:
+        scheme = get_scheme()
+
+        # Change mode and variant based on wallpaper colour
+        if scheme.name == "dynamic" and not no_smart:
+            smart_opts = get_smart_opts(wall_cache, cache)
+            scheme.mode = smart_opts["mode"]
+            scheme.variant = smart_opts["variant"]
+
+        # Update colours
+        scheme.update_colours()
+        apply_colours(scheme.colours, scheme.mode)
+
+    if post_hook:
+        # With no_scheme only read the existing scheme for the hook env;
+        # get_scheme() never regenerates colours (it only bootstraps a
+        # missing scheme.json on a fresh system).
+        if scheme is None:
+            scheme = get_scheme()
+
         subprocess.run(
             post_hook,
             shell=True,
@@ -384,5 +394,5 @@ def set_random(args: Namespace) -> None:
     except (FileNotFoundError, ValueError):
         pass
 
-    set_wallpaper(random.choice(wallpapers), args.no_smart)
+    set_wallpaper(random.choice(wallpapers), args.no_smart, getattr(args, "no_scheme", False))
 

@@ -126,6 +126,7 @@ complete -c caelestia -n "$seen wallpaper" -s f -l file -d 'The file to switch t
 complete -c caelestia -n "$seen wallpaper" -s n -l no-filter -d 'Do not filter by size'
 complete -c caelestia -n "$seen wallpaper" -s t -l threshold -d 'The threshold to filter by' -r
 complete -c caelestia -n "$seen wallpaper" -s N -l no-smart -d 'Disable smart mode switching'
+complete -c caelestia -n "$seen wallpaper" -l no-scheme -d 'Do not generate or apply colours'
 
 # Emoji
 complete -c caelestia -n "$seen emoji" -s p -l picker -d 'Open emoji/glyph picker'

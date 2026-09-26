@@ -147,6 +147,11 @@ def parse_args() -> tuple[argparse.ArgumentParser, argparse.Namespace]:
         help="do not automatically change the scheme mode based on wallpaper colour",
     )
     wallpaper_parser.add_argument(
+        "--no-scheme",
+        action="store_true",
+        help="do not generate or apply colours when setting the wallpaper",
+    )
+    wallpaper_parser.add_argument(
         "--extract-thumbs",
         action="store_true",
         help="extract thumbnails for all videos in wallpapers directory",
