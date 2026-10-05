@@ -27,12 +27,27 @@ class Command:
             self.message(*self.args.message)
         else:
             # Hardware Decoder Injection
+            # Both vars must always be set: Qt's FFmpeg backend probes CUDA/VDPAU/VAAPI
+            # devices at plugin init whenever either list is unset, which pins an
+            # NVIDIA GPU awake (no D3 sleep). "," is Qt's documented empty list.
             try:
+                decoder = "none"
                 decoder_file = Path(os.path.expanduser("~/.cache/caelestia/hwDecoder.txt"))
                 if decoder_file.exists():
-                    decoder = decoder_file.read_text().strip()
-                    if decoder and decoder.lower() != "auto":
-                        os.environ["QT_FFMPEG_DECODING_HW_DEVICE_TYPES"] = decoder
+                    decoder = decoder_file.read_text().strip() or "none"
+
+                if decoder.lower() == "auto":
+                    # Qt's preferred Linux order (CUDA, VAAPI); parsed lazily, so no
+                    # devices are created until a video is actually decoded.
+                    os.environ["QT_FFMPEG_DECODING_HW_DEVICE_TYPES"] = "cuda,vaapi"
+                    os.environ["QT_FFMPEG_ENCODING_HW_DEVICE_TYPES"] = "cuda,vaapi"
+                elif decoder.lower() == "none":
+                    os.environ["QT_FFMPEG_DECODING_HW_DEVICE_TYPES"] = ","
+                    os.environ["QT_FFMPEG_ENCODING_HW_DEVICE_TYPES"] = ","
+                else:
+                    os.environ["QT_FFMPEG_DECODING_HW_DEVICE_TYPES"] = decoder
+                    os.environ["QT_FFMPEG_DECODING_HW_DEVICE_TYPES"] = decoder
+
             except Exception:
                 pass
 
