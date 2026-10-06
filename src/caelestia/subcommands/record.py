@@ -8,7 +8,13 @@ from pathlib import Path
 
 from caelestia.utils import niri
 from caelestia.utils.notify import close_notification, notify
-from caelestia.utils.paths import get_config, recording_notif_path, recording_path, recordings_dir
+from caelestia.utils.paths import (
+    get_config,
+    recording_notif_path,
+    recording_path,
+    recording_socket_path,
+    recordings_dir,
+)
 
 RECORDER = "gpu-screen-recorder"
 
@@ -21,7 +27,7 @@ class Command:
 
     def run(self) -> None:
         if self.args.pause:
-            subprocess.run(["pkill", "-USR2", "-f", RECORDER], stdout=subprocess.DEVNULL)
+            self.pause()
         elif self.proc_running():
             self.stop()
         else:
@@ -52,6 +58,34 @@ class Command:
         except (TypeError, ValueError) as e:
             raise ValueError(f"Config option 'record.refreshRate' should be a number: {e}")
 
+    def gsr_cli(self) -> str | None:
+        path = shutil.which("gsr-cli")
+        if path is not None:
+            return path
+        recorder = shutil.which(RECORDER)
+        if recorder is not None:
+            sibling = Path(recorder).parent / "gsr-cli"
+            if sibling.is_file():
+                return str(sibling)
+        return None
+
+    def pause(self) -> None:
+        gsr_cli = self.gsr_cli()
+        if gsr_cli is not None:
+            try:
+                if (
+                    subprocess.run(
+                        [gsr_cli, "-ipc", str(recording_socket_path), "toggle-pause"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    ).returncode
+                    == 0
+                ):
+                    return
+            except OSError:
+                pass
+        subprocess.run(["pkill", "-USR2", "-f", RECORDER], stdout=subprocess.DEVNULL)
+
     def start(self) -> None:
         args = ["-w"]
         fps = self.fps()
@@ -59,7 +93,9 @@ class Command:
         outputs = niri.get_outputs()
         if self.args.region:
             if self.args.region == "slurp":
-                region = subprocess.check_output(["slurp", "-f", "%wx%h+%x+%y"], text=True)
+                region = subprocess.check_output(
+                    ["slurp", "-f", "%wx%h+%x+%y"], text=True, stdin=subprocess.DEVNULL
+                )
             else:
                 region = self.args.region.strip()
             args += ["region", "-region", region]
@@ -75,22 +111,29 @@ class Command:
                 for name, output in outputs.items():
                     mode = output.get("mode", {})
                     loc = output.get("location", {})
-                    out_w = mode.get("width", 0)
-                    out_h = mode.get("height", 0)
+                    logical = output.get("logical") or {}
+                    # slurp reports logical coordinates, so intersect against
+                    # the logical rectangle when available (scale-correct)
                     out_x = loc.get("x", 0)
                     out_y = loc.get("y", 0)
+                    out_w = logical.get("width") or mode.get("width", 0)
+                    out_h = logical.get("height") or mode.get("height", 0)
                     if self.intersects((out_x, out_y, out_w, out_h), r):
                         rr = round(mode.get("refresh_rate", 0) / 1000)
                         max_rr = max(max_rr, rr)
                 fps = max_rr
-            args += ["-f", str(fps)]
+            if fps and fps > 0:
+                args += ["-f", str(fps)]
         else:
             focused_name = niri.get_focused_output_name()
-            if focused_name and focused_name in outputs:
-                output = outputs[focused_name]
-                if fps is None:
-                    fps = round(output.get("mode", {}).get("refresh_rate", 0) / 1000)
-                args += [focused_name, "-f", str(fps)]
+            if not focused_name or focused_name not in outputs:
+                raise ValueError("no focused output found for fullscreen recording")
+            output = outputs[focused_name]
+            args += [focused_name]
+            if fps is None:
+                fps = round(output.get("mode", {}).get("refresh_rate", 0) / 1000)
+            if fps and fps > 0:
+                args += ["-f", str(fps)]
 
         if self.args.sound:
             args += ["-a", "default_output"]
@@ -103,7 +146,11 @@ class Command:
             raise ValueError(f"Config option 'record.extraArgs' should be an array: {e}")
 
         recording_path.parent.mkdir(parents=True, exist_ok=True)
-        proc = subprocess.Popen([RECORDER, *args, "-o", str(recording_path)], start_new_session=True)
+        recording_socket_path.unlink(missing_ok=True)
+        proc = subprocess.Popen(
+            [RECORDER, *args, "-ipc", str(recording_socket_path), "-o", str(recording_path)],
+            start_new_session=True,
+        )
 
         notif = notify("-p", "Recording started", "Recording...")
         recording_notif_path.write_text(notif)

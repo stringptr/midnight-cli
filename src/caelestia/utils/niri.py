@@ -57,22 +57,46 @@ def request(payload: str) -> Any:
 
 
 def get_outputs() -> dict[str, Any]:
-    """Get all Niri outputs.
+    """Get all Niri outputs, normalised to the contract consumers expect.
+
+    Niri's IPC returns ``modes`` (list of modes), ``current_mode`` (index into
+    it, ``None`` when disabled) and ``logical`` (compositor-space rectangle).
+    Consumers (record, wallpaper) expect a single active ``mode`` object and a
+    ``location`` point, so both are injected per output while every original
+    field (including ``logical``) is preserved.
 
     Returns:
-        Dict keyed by output name (e.g. "eDP-1"), each value containing:
+        Dict keyed by output name (e.g., "eDP-1"), each value containing at
+        least:
         {
             "mode": {"width": 1920, "height": 1080, "refresh_rate": 60000},
-            "transform": "0",
             "location": {"x": 0, "y": 0},
-            "scale": 1.0,
-            "connected": true,
-            "make": "...",
-            "model": "...",
-            "serial": "..."
+            "logical": {"x": 0, "y": 0, "width": 1920, "height": 1080, ...},
+            ...
         }
+        where ``refresh_rate`` is in millihertz.
     """
-    return request("Outputs")["Outputs"]
+    outputs = request("Outputs")["Outputs"]
+
+    for output in outputs.values():
+        modes = output.get("modes") or []
+        current = output.get("current_mode")
+        if isinstance(current, int) and 0 <= current < len(modes):
+            mode = modes[current]
+        elif modes:
+            mode = next((m for m in modes if m.get("is_preferred")), modes[0])
+        else:
+            mode = {}
+
+        logical = output.get("logical") or {}
+        output["mode"] = {
+            "width": mode.get("width", 0),
+            "height": mode.get("height", 0),
+            "refresh_rate": mode.get("refresh_rate", 0),
+        }
+        output["location"] = {"x": logical.get("x", 0), "y": logical.get("y", 0)}
+
+    return outputs
 
 
 def get_focused_output_name() -> str | None:
