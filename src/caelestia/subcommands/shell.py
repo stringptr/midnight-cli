@@ -55,7 +55,7 @@ class Command:
                     os.environ["QT_FFMPEG_ENCODING_HW_DEVICE_TYPES"] = ","
                 else:
                     os.environ["QT_FFMPEG_DECODING_HW_DEVICE_TYPES"] = decoder
-                    os.environ["QT_FFMPEG_DECODING_HW_DEVICE_TYPES"] = decoder
+                    os.environ["QT_FFMPEG_ENCODING_HW_DEVICE_TYPES"] = decoder
 
             except Exception:
                 pass
