@@ -2,9 +2,6 @@
 
 The main control script for the MiDnight dotfiles.
 
-> [!WARNING]
-> This project is no longer being maintained by me. I have started work on my own rust based shell. As soon as it is publicly available, you may find it [here](https://github.com/Kiite-Org/KiiteShell).
-
 <details><summary id="dependencies">External dependencies</summary>
 
 - [`libnotify`](https://gitlab.gnome.org/GNOME/libnotify) - sending notifications
