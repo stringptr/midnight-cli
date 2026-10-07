@@ -18,6 +18,41 @@ from caelestia.utils.paths import (
 
 RECORDER = "gpu-screen-recorder"
 
+# Handles the "Recording stopped" notification actions in a tiny detached shell
+# process, so `caelestia record` can exit as soon as the recording is saved.
+_STOPPED_NOTIF_HANDLER = r"""
+path=$1
+uri=$2
+directory=$3
+
+action=$(notify-send -a caelestia-cli \
+    --action=watch=Watch \
+    --action=open=Open \
+    --action=delete=Delete \
+    "Recording stopped" \
+    "Recording saved in $path") || exit 0
+
+case "$action" in
+    watch)
+        exec xdg-open "$path"
+        ;;
+    open)
+        if ! dbus-send --session \
+            --dest=org.freedesktop.FileManager1 \
+            --type=method_call \
+            /org/freedesktop/FileManager1 \
+            org.freedesktop.FileManager1.ShowItems \
+            "array:string:$uri" \
+            "string:"; then
+            exec xdg-open "$directory"
+        fi
+        ;;
+    delete)
+        rm -f -- "$path"
+        ;;
+esac
+"""
+
 
 class Command:
     args: Namespace
@@ -94,7 +129,9 @@ class Command:
         if self.args.region:
             if self.args.region == "slurp":
                 region = subprocess.check_output(
-                    ["slurp", "-f", "%wx%h+%x+%y"], text=True, stdin=subprocess.DEVNULL
+                    ["slurp", "-f", "%wx%h+%x+%y"],
+                    text=True,
+                    stdin=subprocess.DEVNULL,
                 )
             else:
                 region = self.args.region.strip()
@@ -147,8 +184,12 @@ class Command:
 
         recording_path.parent.mkdir(parents=True, exist_ok=True)
         recording_socket_path.unlink(missing_ok=True)
+        # The recorder outlives this command, so it must not inherit our stdio
         proc = subprocess.Popen(
             [RECORDER, *args, "-ipc", str(recording_socket_path), "-o", str(recording_path)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
 
@@ -189,30 +230,23 @@ class Command:
             file_uri = Path(new_path).resolve().as_uri() + "\n"
             subprocess.run(["wl-copy", "--type", "text/uri-list"], input=file_uri.encode())
 
-        action = notify(
-            "--action=watch=Watch",
-            "--action=open=Open",
-            "--action=delete=Delete",
-            "Recording stopped",
-            f"Recording saved in {new_path}",
-        )
+        recording = new_path.resolve()
 
-        if action == "watch":
-            subprocess.Popen(["xdg-open", new_path], start_new_session=True)
-        elif action == "open":
-            p = subprocess.run(
-                [
-                    "dbus-send",
-                    "--session",
-                    "--dest=org.freedesktop.FileManager1",
-                    "--type=method_call",
-                    "/org/freedesktop/FileManager1",
-                    "org.freedesktop.FileManager1.ShowItems",
-                    f"array:string:file://{new_path}",
-                    "string:",
-                ]
-            )
-            if p.returncode != 0:
-                subprocess.Popen(["xdg-open", new_path.parent], start_new_session=True)
-        elif action == "delete":
-            new_path.unlink()
+        # The action notification's lifetime is the user's interaction with it,
+        # not this command's, so hand it off to a detached lightweight handler
+        subprocess.Popen(
+            [
+                "sh",
+                "-c",
+                _STOPPED_NOTIF_HANDLER,
+                "sh",
+                str(recording),
+                recording.as_uri(),
+                str(recording.parent),
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            cwd="/",
+        )
